@@ -18,7 +18,28 @@ def load_log(path):
     return series
 
 
-def plot_pretraining_or_sft(series, plot_path):
+# GPT-2 124M baseline numbers (Radford et al. 2019 / Karpathy's llm.c), for comparison
+# against our pretraining run.
+loss_baseline = {
+    "124M": 3.2924,
+}
+hella2_baseline = {  # HellaSwag for GPT-2
+    "124M": 0.294463,
+}
+hella3_baseline = {  # HellaSwag for GPT-3
+    "124M": 0.337,
+}
+
+
+def annotate_last(ax, steps, values, color=None):
+    if not steps:
+        return
+    x, y = steps[-1], values[-1]
+    ax.annotate(f"{y:.4f}", xy=(x, y), xytext=(5, 0), textcoords="offset points",
+                va="center", fontsize=8, color=color)
+
+
+def plot_pretraining_or_sft(series, plot_path, is_pretraining):
     has_hellaswag = "hellaswag" in series  # only pretraining logs a hellaswag split
 
     fig, axes = plt.subplots(2 if has_hellaswag else 1, 1, figsize=(10, 8 if has_hellaswag else 4), sharex=True)
@@ -27,7 +48,12 @@ def plot_pretraining_or_sft(series, plot_path):
     for split in ("train", "val"):
         if split in series:
             steps, values = series[split]
-            loss_ax.plot(steps, values, label=split)
+            line, = loss_ax.plot(steps, values, label=split)
+            if split == "val":
+                annotate_last(loss_ax, steps, values, color=line.get_color())
+    if is_pretraining:
+        loss_ax.axhline(loss_baseline["124M"], color="tab:red", linestyle="--",
+                         label="GPT-2 124M baseline")
     loss_ax.set_xlabel("step")
     loss_ax.set_ylabel("loss")
     loss_ax.set_title("Loss")
@@ -37,9 +63,16 @@ def plot_pretraining_or_sft(series, plot_path):
         acc_ax = axes[1]
         steps, values = series["hellaswag"]
         acc_ax.plot(steps, values, label="hellaswag", color="tab:green")
+        annotate_last(acc_ax, steps, values, color="tab:green")
+        if is_pretraining:
+            acc_ax.axhline(hella2_baseline["124M"], color="tab:red", linestyle="--",
+                            label="GPT-2 124M baseline")
+            acc_ax.axhline(hella3_baseline["124M"], color="tab:purple", linestyle="--",
+                            label="GPT-3 124M baseline")
         acc_ax.set_xlabel("step")
         acc_ax.set_ylabel("accuracy")
         acc_ax.set_title("HellaSwag accuracy")
+        acc_ax.legend()
 
     fig.tight_layout()
     fig.savefig(plot_path)
@@ -87,7 +120,7 @@ def main():
     if args.run == "rlvr":
         plot_rlvr(series, plot_path)
     else:
-        plot_pretraining_or_sft(series, plot_path)
+        plot_pretraining_or_sft(series, plot_path, is_pretraining=args.run == "pretraining")
 
     print(f"Saved plot to {plot_path}")
 
